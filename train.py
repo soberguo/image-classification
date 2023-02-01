@@ -1,126 +1,165 @@
-import torch
-import torchvision.transforms as transforms
-from torchvision import datasets
 import os
+import sys
 import json
-import matplotlib.pyplot as plt
-import numpy as np
-import torchvision
-from vgg import vgg
+
+import torch
 import torch.nn as nn
-from torch import optim
-import time
+import torch.optim as optim
+from torchvision import transforms, datasets
+from tqdm import tqdm
+
+from resnet import resnet34,resnext50_32x4d
+import visdom
+
+def main(bs,epochs,lr,path):
+    batch_size = bs
+    data_root=path
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print("using {} device.".format(device))
+
+    data_transform = {
+        "train": transforms.Compose([transforms.RandomResizedCrop(224),
+                                     transforms.RandomHorizontalFlip(),
+                                     transforms.ToTensor(),
+                                     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]),
+        "val": transforms.Compose([transforms.Resize(256),
+                                   transforms.CenterCrop(224),
+                                   transforms.ToTensor(),
+                                   transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])}
+
+    #data_root = os.path.abspath(os.path.join(os.getcwd(), "./.."))  # get data root path
+    image_path = os.path.join(data_root, "data_set", "flower_data")  # flower data set path
+    assert os.path.exists(image_path), "{} path does not exist.".format(image_path)
+    train_dataset = datasets.ImageFolder(root=os.path.join(image_path, "train"),
+                                         transform=data_transform["train"])
+    train_num = len(train_dataset)
+
+    # {'daisy':0, 'dandelion':1, 'roses':2, 'sunflower':3, 'tulips':4}
+    flower_list = train_dataset.class_to_idx
+    cla_dict = dict((val, key) for key, val in flower_list.items())
+    # write dict into json file
+    json_str = json.dumps(cla_dict, indent=4)
+    with open('class_indices.json', 'w') as json_file:
+        json_file.write(json_str)
+
+
+    nw = min([os.cpu_count(), batch_size if batch_size > 1 else 0, 8])  # number of workers
+    print('Using {} dataloader workers every process'.format(nw))
+
+    train_loader = torch.utils.data.DataLoader(train_dataset,
+                                               batch_size=batch_size, shuffle=True,
+                                               num_workers=nw)
+
+    validate_dataset = datasets.ImageFolder(root=os.path.join(image_path, "val"),
+                                            transform=data_transform["val"])
+    val_num = len(validate_dataset)
+    validate_loader = torch.utils.data.DataLoader(validate_dataset,
+                                                  batch_size=batch_size, shuffle=False,
+                                                  num_workers=nw)
+
+    print("using {} images for training, {} images for validation.".format(train_num,
+                                                                           val_num))
+
+    net = resnext50_32x4d()
+    # load pretrain weights
+    # download url: https://download.pytorch.org/models/resnet34-333f7ec4.pth
+    model_weight_path = "./resnext50_32x4d-7cdf4587.pth"
+    assert os.path.exists(model_weight_path), "file {} does not exist.".format(model_weight_path)
+    net.load_state_dict(torch.load(model_weight_path, map_location='cpu'))
+    #resnet注释下面两行，resnext不需要注释
+    for param in net.parameters():
+        param.requires_grad = False
 
 
 
+    # change fc layer structure
+    in_channel = net.fc.in_features
+    net.fc = nn.Linear(in_channel, 5)
+    net.to(device)
 
-device=torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-print(device)
+    # define loss function
+    loss_function = nn.CrossEntropyLoss()
 
+    # construct an optimizer
+    params = [p for p in net.parameters() if p.requires_grad]
+    optimizer = optim.Adam(params, lr=lr)
 
-data_transform={
-    'train':transforms.Compose([
-        transforms.RandomResizedCrop(224),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))
-    ]),
-    'val':transforms.Compose([
-        transforms.Resize((224,224)),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))
-    ])
-}
+    viz = visdom.Visdom()
+    viz.line([0], [0], win='loss', opts=dict(title='loss'))
+    viz.line([0], [0], win='val_acc', opts=dict(title='val_acc'))
 
-#设置数据集路径
-data_root=os.path.abspath(os.path.join(os.getcwd(),'./..'))#get data root path\
-#print(data_root)
-image_path=data_root+'/data_set/flower_data/'
+    best_acc = 0.0
+    save_path = './resNext50.pth'
+    train_steps = len(train_loader)
+    for epoch in range(epochs):
+        # train
+        net.train()
+        running_loss = 0.0
+        train_bar = tqdm(train_loader, file=sys.stdout)
+        for step, data in enumerate(train_bar):
+            images, labels = data
+            optimizer.zero_grad()
+            logits = net(images.to(device))
+            loss = loss_function(logits, labels.to(device))
+            loss.backward()
+            optimizer.step()
 
+            # print statistics
+            running_loss += loss.item()
 
-train_dataset=datasets.ImageFolder(root=image_path+'train',transform=data_transform['train'])
-val_dataset=datasets.ImageFolder(root=image_path+'val',transform=data_transform['val'])
-train_num=len(train_dataset)
-#print(train_num)
-flower_list=train_dataset.class_to_idx#{'daisy': 0, 'dandelion': 1, 'roses': 2, 'sunflowers': 3, 'tulips': 4}
-#print(flower_list)
-cla_dict=dict((val,key) for key,val in flower_list.items())#{0: 'daisy', 1: 'dandelion', 2: 'roses', 3: 'sunflowers', 4: 'tulips'}
-#print(cla_dict)
-json_str=json.dumps(cla_dict,indent=4)
-with open('class_indices.json','w') as f:
-    f.write(json_str)
+            train_bar.desc = "train epoch[{}/{}] loss:{:.3f}".format(epoch + 1,
+                                                                     epochs,
+                                                                     loss)
+        viz.line([running_loss/train_steps], [epoch+1], win='loss', update='append',opts=dict(title='val_acc',legend=['acc'],
+                                                                                  xtickmin=0,xtickmax=30, xtickstep=5,
+                                                                                           ytickmin=0, ytickmax=100,
+                                                                                           ytickstep=20, ))
 
+        # validate
+        net.eval()
+        acc = 0.0  # accumulate accurate number / epoch
+        with torch.no_grad():
+            val_bar = tqdm(validate_loader, file=sys.stdout)
+            for val_data in val_bar:
+                val_images, val_labels = val_data
+                outputs = net(val_images.to(device))
+                # loss = loss_function(outputs, test_labels)
+                predict_y = torch.max(outputs, dim=1)[1]
+                acc += torch.eq(predict_y, val_labels.to(device)).sum().item()
 
-batchsize=4
-train_loader=torch.utils.data.DataLoader(train_dataset,batch_size=batchsize,shuffle=True,num_workers=0)
-val_loader=torch.utils.data.DataLoader(val_dataset,batch_size=batchsize,shuffle=False,num_workers=0)
-val_num=len(val_dataset)
+                val_bar.desc = "valid epoch[{}/{}]".format(epoch + 1,
+                                                           epochs)
+                val_bar.set_postfix(acc=acc/val_num)
+        viz.line([acc/val_num], [epoch+1], win='val_acc', update='append',opts=dict(title='val_acc',legend=['acc'],
+                                                                                  xtickmin=0,xtickmax=30, xtickstep=5,
+                                                                                           ytickmin=0, ytickmax=100,
+                                                                                           ytickstep=20, ))
+        # viz.line([[test_loss]], [global_step], win='test_loss', update='append', opts=dict(title='test loss',
+        #                                                                                    legend=['loss'], xtickmin=0,
+        #                                                                                    xtickmax=30, xtickstep=5,
+        #                                                                                    ytickmin=0, ytickmax=100,
+        #                                                                                    ytickstep=20, ))
+        val_accurate = acc / val_num
+        print('[epoch %d] train_loss: %.3f  val_accuracy: %.3f' %
+              (epoch + 1, running_loss / train_steps, val_accurate))
 
-#访问数据集的图像
-# test_data_iter=iter(val_loader)
-# test_image,test_label=test_data_iter.next()
-#
-# def imshow(img):
-#     img=img/2+0.5
-#     npimg=img.numpy()
-#     plt.imshow(np.transpose(npimg,(1,2,0)))
-#     plt.show()
-#
-# print('  '.join('%5s'% cla_dict[test_label[j].item()] for j in range(4)))
-# imshow(torchvision.utils.make_grid(test_image))
+        if val_accurate > best_acc:
+            best_acc = val_accurate
+            torch.save(net.state_dict(), save_path)
 
-
-net=vgg(model_name='vgg16',num_classes=5,init_weights=True).to(device)
-loss_function=nn.CrossEntropyLoss().to(device)
-optimizer=optim.Adam(net.parameters(),lr=0.0002)
-
-
-save_path='./vgg.pth'
-best_acc=0.0
-for epoch in range(10):
-    #train
-    net.train()
-    running_loss=0.0
-    t1=time.perf_counter()
-    for step,data in enumerate(train_loader):
-        images,labels=data
-        images=images.to(device)
-        labels=labels.to(device)
-        optimizer.zero_grad()
-        output=net(images)
-
-        loss=loss_function(output,labels)
-        loss.backward()
-        optimizer.step()
+    print('Finished Training')
 
 
-        running_loss+=loss.item()
-        rate=(step+1)/len(train_loader)
-        a='*'*int(rate*50)
-        b='.'*int((1-rate)*50)
-        print('\rtrain loss: {:^3.0f}%[{}->{}]{:.3f}'.format(int(rate*100),a,b,loss),end='')
-    print()
-    print(time.perf_counter()-t1)
+if __name__ == '__main__':
+    import argparse
 
-
-    #val
-    net.eval()
-    acc=0.0
-    with torch.no_grad():
-        for data_test in val_loader:
-            test_images,test_labels=data_test
-            test_images, test_labels =test_images.to(device),test_labels.to(device)
-            outputs=net(test_images)
-            predict_y=torch.max(outputs,dim=1)[1]
-            acc+=(predict_y==test_labels).sum().item()
-        acc_test=acc/val_num
-        if acc_test>best_acc:
-            best_acc=acc_test
-            torch.save(net.state_dict(),save_path)
-        print('[epoch %d] train loss:%.3f test accuracy:%.3f'%(epoch+1,running_loss/step,acc/val_num))
-
-
-print('finish train')
-
-
+    parser=argparse.ArgumentParser(description='resnet')
+    parser.add_argument('--batchsize',type=int,default=8,help='bs')
+    parser.add_argument('--epochs', type=int, default=10, help='epochs')
+    parser.add_argument('--lr', type=float, default=2e-3, help='lr')
+    parser.add_argument('--path', type=str, default='D:/code/pytorchclass/wz_pytorch/', help='path')
+    args=parser.parse_args()
+    #print(args.batchsize,args.epochs,args.lr,args.path)
+    main(bs=args.batchsize,epochs=args.epochs,lr=args.lr,path=args.path)
 
