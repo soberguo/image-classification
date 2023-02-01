@@ -10,8 +10,8 @@
 
 ## 训练方法
 
-方法1.在train.py里面修改网络超参数，直接运行train.py文件
-方法2.在终端输入python train.py --batchsize=8 --epochs=10 --lr=0.0001
+方法1.在train.py里面修改网络超参数，直接运行train.py文件了。
+方法2.在终端输入python train.py --batchsize=8 --epochs=10 --lr=0.0001。
 
 
 
