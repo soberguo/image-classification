@@ -10,6 +10,7 @@
 ```
 | 网络 | 权值文件名称 | 测试数据集 | 输入图片大小 | mAP 0.5:0.95 | mAP 0.5 |
 | :-----: | :-----: | :------: | :------: | :------: | :-----: |
+| resnet18 | [resnet18-5c106cde.pth](https://download.pytorch.org/models/resnet18-5c106cde.pth) | coco-val2017 | 640x640 |111  | 46
 | resnet34 | [resnet34-333f7ec4.pth](https://download.pytorch.org/models/resnet34-333f7ec4.pth) | COCO-Val2017 | 640x640 | 27.4 | 44.5
 | resnet50 | [resnet50-19c8e357.pth](https://download.pytorch.org/models/resnet50-19c8e357.pth) | COCO-Val2017 | 640x640 | 34.7 | 53.6
 | COCO-Train2017 | [yolox_s.pth](https://github.com/bubbliiiing/yolox-pytorch/releases/download/v1.0/yolox_s.pth) | COCO-Val2017 | 640x640 | 38.2 | 57.7
