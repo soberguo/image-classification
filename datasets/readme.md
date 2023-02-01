@@ -1,8 +1,17 @@
 #数据集放这里
 格式如下
-dataset
-  -yourdataset1    
-    -yourdataset2
-      -类别1
-      -类别2
-      -类别3
+
+|-datasets
+    |-yourdataset1 
+        |-yourdataset1 
+              |-类别1                 
+                  |-123.jpg
+                  |-234.jpg
+                  |-345.jpg
+                  |-456.jpg
+              |-类别2                  
+                  |-567.jpg
+                  |-678.jpg
+                  |-789.jpg
+                  |-890.jpg
+              
