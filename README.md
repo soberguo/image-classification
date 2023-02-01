@@ -9,9 +9,9 @@
 
 
 ## 训练方法
-两种训练方法可选
-1.在train.py里面修改网络超参数，直接运行train.py文件了
-2.在终端输入如下命令：
+ **两种训练方法可选**
+1. 在train.py里面修改网络超参数，直接运行train.py文件了
+2. 在终端输入如下命令：
 ```python
 python train.py --batchsize=8 --epochs=10 --lr=0.0001
 ```
