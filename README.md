@@ -1,7 +1,7 @@
 # image-classification
 这是我最近学习的图像处理的代码，我自己进行了整合，修改  
 目前网络包含：  
-resnet,vgg,mobilenet,lenet,alexnet,googlenet  
+`lenet`,`alexnet`,`googlenet`,`vgg`,`resnet`,`mobilenet`,`shufflenet`,`senet`,`efficient'  
 持续更新中。。。。。
 ## 训练权重
 | 网络 | 权值文件名称 | 下载链接 | 输入图片大小 | mAP 0.5:0.95 | mAP 0.5 |
@@ -13,7 +13,7 @@ resnet,vgg,mobilenet,lenet,alexnet,googlenet
 
 ## 训练方法
  **两种训练方法可选**
-1. 在train.py里面修改网络超参数，直接运行train.py文件了
+1. 在train.py里面修改网络超参数，直接运行`train.py`文件了
 2. 在终端输入如下命令：
 ```python
 python train.py --batchsize=8 --epochs=10 --lr=0.0001
